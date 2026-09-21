@@ -1,13 +1,19 @@
+
 const express = require('express');
 
 const authRouter = require('./routes/auth');
 const rotaRouter = require('./routes/rota');
 const gpsRoutes = require('./routes/gps');
+
 const app = express();
 
 const PORT = 3000;
 
-// Permite receber JSON
+
+// ========================================
+// PERMITE RECEBER JSON
+// ========================================
+
 app.use(express.json());
 
 
@@ -32,18 +38,53 @@ app.use((req, res, next) => {
             ' ' +
             agora.toLocaleTimeString('pt-BR');
 
+
         console.log('');
+
         console.log('========================================');
-        console.log(`[Requisição recebida - HTTP ${res.statusCode}]`);
+
+        console.log(
+            `[Requisição recebida - HTTP ${res.statusCode}]`
+        );
+
         console.log(`[Origem: Hash: ${hash}]`);
+
         console.log(`[Data/Hora: ${dataHora}]`);
 
-        // Resultado da operação
-        if (req.path === '/rota' && res.statusCode === 200) {
+
+        // ====================================
+        // LOG DE PONTO GPS
+        // ====================================
+        console.log('[BODY RECEBIDO]:');
+    console.log(req.body);
+        if (
+            req.path.startsWith('/gps') &&
+            req.body &&
+            typeof req.body.latitude === 'number' &&
+            typeof req.body.longitude === 'number'
+        ) {
+
+            console.log(
+                `Ponto de GPS recebido: ${req.body.latitude}, ${req.body.longitude}`
+            );
+        }
+
+
+        // ====================================
+        // RESULTADO DA OPERAÇÃO
+        // ====================================
+
+        if (
+            req.path === '/rota' &&
+            res.statusCode === 200
+        ) {
 
             if (res.locals.rotaEntregue === true) {
+
                 console.log('[Rota: Entregue]');
+
             } else {
+
                 console.log('[Rota: Não encontrada]');
             }
 
@@ -54,6 +95,7 @@ app.use((req, res, next) => {
 
             console.log('[Rota: Finalizada]');
         }
+
 
         console.log('========================================');
     });
@@ -67,8 +109,11 @@ app.use((req, res, next) => {
 // ========================================
 
 app.use('/', authRouter);
+
 app.use('/', rotaRouter);
+
 app.use('/gps', gpsRoutes);
+
 
 // ========================================
 // JSON INVÁLIDO
@@ -114,3 +159,4 @@ app.listen(PORT, () => {
 
     console.log(`API rodando na porta ${PORT}`);
 });
+

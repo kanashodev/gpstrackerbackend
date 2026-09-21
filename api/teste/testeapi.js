@@ -5,9 +5,18 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
+// ======================================================
+// BANCO DE DADOS
+// ======================================================
+
 const dbPath = path.join(__dirname, '../../database.db');
 
 const db = new Database(dbPath);
+
+db.pragma('foreign_keys = ON');
+
+console.log('BANCO USADO:', dbPath);
+
 
 const rl = readline.createInterface({
     input: process.stdin,

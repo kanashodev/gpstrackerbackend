@@ -1,8 +1,25 @@
+
+const path = require('path');
 const Database = require('better-sqlite3');
 
-const db = new Database('database.db');
+// ======================================================
+// BANCO DE DADOS
+// ======================================================
+
+// Garante que sempre seja usado o database.db
+// localizado na mesma pasta deste arquivo.
+const caminhoBanco = path.join(__dirname, 'database.db');
+
+console.log('BANCO USADO:', caminhoBanco);
+
+const db = new Database(caminhoBanco);
 
 db.pragma('foreign_keys = ON');
+
+
+// ======================================================
+// CRIAÇÃO DAS TABELAS
+// ======================================================
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS motoristas (
@@ -16,7 +33,9 @@ db.exec(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         motorista_id INTEGER NOT NULL UNIQUE,
         data_cadastro TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (motorista_id) REFERENCES motoristas(id) ON DELETE CASCADE
+        FOREIGN KEY (motorista_id)
+            REFERENCES motoristas(id)
+            ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS caminhoes (
@@ -34,15 +53,24 @@ db.exec(`
         quantidade_notas INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'ativa',
         data_criacao TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (motorista_id) REFERENCES motoristas(id) ON DELETE CASCADE,
-        FOREIGN KEY (caminhao_id) REFERENCES caminhoes(id) ON DELETE CASCADE
+
+        FOREIGN KEY (motorista_id)
+            REFERENCES motoristas(id)
+            ON DELETE CASCADE,
+
+        FOREIGN KEY (caminhao_id)
+            REFERENCES caminhoes(id)
+            ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS notas_rota (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         rota_id INTEGER NOT NULL,
         numero_nota TEXT NOT NULL,
-        FOREIGN KEY (rota_id) REFERENCES rotas(id) ON DELETE CASCADE
+
+        FOREIGN KEY (rota_id)
+            REFERENCES rotas(id)
+            ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS gps_pontos (
@@ -53,37 +81,54 @@ db.exec(`
         longitude REAL NOT NULL,
         data_hora_gps TEXT NOT NULL,
         data_hora_recebimento TEXT,
-        FOREIGN KEY (rota_id) REFERENCES rotas(id) ON DELETE CASCADE
+
+        FOREIGN KEY (rota_id)
+            REFERENCES rotas(id)
+            ON DELETE CASCADE
     );
 `);
 
-// Mantém bancos criados em versões anteriores compatíveis com a nova coluna de status.
-const colunasRotas = db.prepare('PRAGMA table_info(rotas)').all();
-const possuiStatus = colunasRotas.some(coluna => coluna.name === 'status');
 
-if (!possuiStatus) {
-    db.exec(`
-        ALTER TABLE rotas
-        ADD COLUMN status TEXT NOT NULL DEFAULT 'ativa';
-    `);
-}
+// ======================================================
+// FUNÇÃO DE MIGRAÇÃO
+// ======================================================
 
-
-// Migração para bancos criados em versões anteriores.
-// Adiciona os novos campos sem apagar os dados existentes.
+// Adiciona uma coluna caso ela não exista.
+// Isso permite atualizar bancos antigos sem apagar os dados.
 function adicionarColunaSeNaoExiste(tabela, coluna, definicao) {
-    const colunas = db.prepare(`PRAGMA table_info(${tabela})`).all();
+    const colunas = db
+        .prepare(`PRAGMA table_info(${tabela})`)
+        .all();
 
-    if (!colunas.some(c => c.name === coluna)) {
-        db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${definicao}`);
+    const existe = colunas.some(c => c.name === coluna);
+
+    if (!existe) {
+        db.exec(`
+            ALTER TABLE ${tabela}
+            ADD COLUMN ${coluna} ${definicao}
+        `);
+
+        console.log(
+            `Coluna adicionada: ${tabela}.${coluna}`
+        );
     }
 }
+
+
+// ======================================================
+// MIGRAÇÃO - MOTORISTAS
+// ======================================================
 
 adicionarColunaSeNaoExiste(
     'motoristas',
     'status',
     "TEXT NOT NULL DEFAULT 'disponivel'"
 );
+
+
+// ======================================================
+// MIGRAÇÃO - ROTAS
+// ======================================================
 
 adicionarColunaSeNaoExiste(
     'rotas',
@@ -109,21 +154,34 @@ adicionarColunaSeNaoExiste(
     "TEXT NOT NULL DEFAULT 'ativa'"
 );
 
+
 // ======================================================
-// MIGRAÇÃO GPS
+// MIGRAÇÃO - GPS
 // ======================================================
 
-// Adiciona a coluna ponto em bancos antigos.
+// Bancos antigos podem não possuir a coluna "ponto".
 adicionarColunaSeNaoExiste(
     'gps_pontos',
     'ponto',
     'TEXT'
 );
 
-// Índice para impedir ponto duplicado dentro da mesma rota.
+
+// ======================================================
+// ÍNDICES
+// ======================================================
+
+// Impede que o mesmo ponto seja cadastrado
+// duas vezes dentro da mesma rota.
 db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_gps_pontos_rota_ponto
     ON gps_pontos (rota_id, ponto);
 `);
 
+
+// ======================================================
+// EXPORTAÇÃO
+// ======================================================
+
 module.exports = db;
+

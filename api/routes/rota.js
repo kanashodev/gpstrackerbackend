@@ -1,3 +1,4 @@
+
 const express = require('express');
 
 const router = express.Router();
@@ -11,6 +12,10 @@ const db = require('../../database');
 
 router.post('/rota', (req, res) => {
 
+    // ------------------------------------
+    // Validação do formato
+    // ------------------------------------
+
     if (
         !req.body ||
         typeof req.body !== 'object' ||
@@ -21,6 +26,11 @@ router.post('/rota', (req, res) => {
             erro: 'Formato inválido'
         });
     }
+
+
+    // ------------------------------------
+    // Validação do hash
+    // ------------------------------------
 
     const { hash } = req.body;
 
@@ -36,18 +46,65 @@ router.post('/rota', (req, res) => {
 
     const hashLimpo = hash.trim();
 
+
+    // ====================================
+    // DIAGNÓSTICO
+    // ====================================
+
+    console.log('');
+    console.log('========== DEBUG /ROTA ==========');
+    console.log('Hash recebido:', hashLimpo);
+    console.log('Tamanho do hash:', hashLimpo.length);
+
+    const quantidadeMotoristas = db
+        .prepare('SELECT COUNT(*) AS total FROM motoristas')
+        .get();
+
+    console.log(
+        'Motoristas no banco da API:',
+        quantidadeMotoristas.total
+    );
+
+
+    // ------------------------------------
+    // Busca motorista pelo hash
+    // ------------------------------------
+
     const motorista = db.prepare(`
-        SELECT id
+        SELECT
+            id,
+            hash,
+            status
         FROM motoristas
         WHERE hash = ?
     `).get(hashLimpo);
 
+
+    console.log(
+        'Motorista encontrado:',
+        motorista || 'NENHUM'
+    );
+
+
+    // ------------------------------------
+    // Hash inválido
+    // ------------------------------------
+
     if (!motorista) {
+
+        console.log('=================================');
+        console.log('');
+
         return res.status(401).json({
             hasRoute: false,
             erro: 'Hash inválido'
         });
     }
+
+
+    // ------------------------------------
+    // Busca rota ativa
+    // ------------------------------------
 
     const rota = db.prepare(`
         SELECT
@@ -59,18 +116,39 @@ router.post('/rota', (req, res) => {
         LIMIT 1
     `).get(motorista.id);
 
+
+    // ------------------------------------
+    // Nenhuma rota
+    // ------------------------------------
+
     if (!rota) {
+
+        console.log('Rota ativa não encontrada.');
+        console.log('=================================');
+        console.log('');
+
         return res.status(200).json({
             hasRoute: false
         });
     }
 
+
+    // ------------------------------------
+    // Busca notas
+    // ------------------------------------
+
     const notas = db.prepare(`
-        SELECT numero_nota
+        SELECT
+            numero_nota
         FROM notas_rota
         WHERE rota_id = ?
         ORDER BY id ASC
     `).all(rota.id);
+
+
+    // ------------------------------------
+    // Monta resposta
+    // ------------------------------------
 
     const resposta = {
         hasRoute: true,
@@ -78,9 +156,17 @@ router.post('/rota', (req, res) => {
         quantidadeDeNotas: notas.length
     };
 
+
     notas.forEach((nota, index) => {
         resposta[`nota${index + 1}`] = nota.numero_nota;
     });
+
+
+    console.log('Rota encontrada:', rota.id);
+    console.log('Quantidade de notas:', notas.length);
+    console.log('=================================');
+    console.log('');
+
 
     return res.status(200).json(resposta);
 });
@@ -106,6 +192,7 @@ router.post('/rota/finalizar', (req, res) => {
             erro: 'Formato inválido'
         });
     }
+
 
     const {
         hash,
@@ -182,7 +269,9 @@ router.post('/rota/finalizar', (req, res) => {
     // ------------------------------------
 
     const motorista = db.prepare(`
-        SELECT id, hash
+        SELECT
+            id,
+            hash
         FROM motoristas
         WHERE hash = ?
     `).get(hashLimpo);
@@ -251,7 +340,8 @@ router.post('/rota/finalizar', (req, res) => {
     // ------------------------------------
 
     const notasBanco = db.prepare(`
-        SELECT numero_nota
+        SELECT
+            numero_nota
         FROM notas_rota
         WHERE rota_id = ?
         ORDER BY id ASC
@@ -277,7 +367,9 @@ router.post('/rota/finalizar', (req, res) => {
         const horaFinalizacao =
             agora.toTimeString().slice(0, 8);
 
+
         // Finaliza rota
+
         db.prepare(`
             UPDATE rotas
             SET
@@ -291,6 +383,7 @@ router.post('/rota/finalizar', (req, res) => {
 
 
         // Libera motorista
+
         db.prepare(`
             UPDATE motoristas
             SET status = 'disponivel'
@@ -321,11 +414,8 @@ router.post('/rota/finalizar', (req, res) => {
     // ====================================
 
     return res.status(200).json({
-
         hasRoute: false,
-
         rotaId: rota.id,
-
         quantidadeDeNotas: notasBanco.length,
 
         ...Object.fromEntries(
@@ -336,10 +426,10 @@ router.post('/rota/finalizar', (req, res) => {
         ),
 
         isDone: true,
-
         mensagem: `Rota ${rota.nome} Finalizada`
     });
 });
 
 
 module.exports = router;
+

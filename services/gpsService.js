@@ -178,6 +178,166 @@ function salvarPontoGps({
         dataHoraRecebimento
     };
 }
+// ======================================================
+// SALVAR VÁRIOS PONTOS GPS
+// ======================================================
+
+function salvarPontosGps({
+    hash,
+    rotaId,
+    pontos
+}) {
+
+    // ------------------------------------------
+    // 1. Verificar motorista pelo hash
+    // ------------------------------------------
+
+    const motorista = db.prepare(`
+        SELECT id, hash
+        FROM motoristas
+        WHERE hash = ?
+    `).get(hash);
+
+    if (!motorista) {
+        return {
+            sucesso: false,
+            status: 404,
+            erro: 'Motorista não encontrado.'
+        };
+    }
+
+    // ------------------------------------------
+    // 2. Verificar se a rota pertence ao motorista
+    // ------------------------------------------
+
+    const rota = db.prepare(`
+        SELECT id, motorista_id, status
+        FROM rotas
+        WHERE id = ?
+        AND motorista_id = ?
+    `).get(rotaId, motorista.id);
+
+    if (!rota) {
+        return {
+            sucesso: false,
+            status: 404,
+            erro: 'Rota não encontrada para este motorista.'
+        };
+    }
+
+    // ------------------------------------------
+    // 3. Verificar se a rota está ativa
+    // ------------------------------------------
+
+    if (rota.status !== 'ativa') {
+        return {
+            sucesso: false,
+            status: 400,
+            erro: 'A rota não está ativa.'
+        };
+    }
+
+    // ------------------------------------------
+    // 4. Verificar se existem pontos
+    // ------------------------------------------
+
+    if (!Array.isArray(pontos) || pontos.length === 0) {
+        return {
+            sucesso: false,
+            status: 400,
+            erro: 'Nenhum ponto GPS enviado.'
+        };
+    }
+
+    // ------------------------------------------
+    // 5. Preparar INSERT
+    // ------------------------------------------
+
+    const inserirPonto = db.prepare(`
+        INSERT INTO gps_pontos (
+            rota_id,
+            ponto,
+            latitude,
+            longitude,
+            data_hora_gps,
+            data_hora_recebimento
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    // ------------------------------------------
+    // 6. Salvar todos os pontos em uma transação
+    // ------------------------------------------
+
+    const salvarTodos = db.transaction((pontos) => {
+
+        const pontosSalvos = [];
+
+        for (const item of pontos) {
+
+            // Verificar ponto duplicado
+            const pontoExistente = db.prepare(`
+                SELECT id
+                FROM gps_pontos
+                WHERE rota_id = ?
+                AND ponto = ?
+            `).get(rotaId, item.ponto);
+
+            if (pontoExistente) {
+                throw new Error(
+                    `O ponto ${item.ponto} já foi registrado para esta rota.`
+                );
+            }
+
+            const dataHoraRecebimento = new Date().toISOString();
+
+            const resultado = inserirPonto.run(
+                rotaId,
+                item.ponto,
+                item.latitude,
+                item.longitude,
+                item.dataHoraGps,
+                dataHoraRecebimento
+            );
+
+            pontosSalvos.push({
+                id: Number(resultado.lastInsertRowid),
+                rotaId,
+                ponto: item.ponto,
+                latitude: item.latitude,
+                longitude: item.longitude,
+                dataHoraGps: item.dataHoraGps,
+                dataHoraRecebimento
+            });
+        }
+
+        return pontosSalvos;
+    });
+
+    // ------------------------------------------
+    // 7. Executar transação
+    // ------------------------------------------
+
+    try {
+
+        const pontosSalvos = salvarTodos(pontos);
+
+        return {
+            sucesso: true,
+            rotaId,
+            quantidade: pontosSalvos.length,
+            pontos: pontosSalvos
+        };
+
+    } catch (erro) {
+
+        return {
+            sucesso: false,
+            status: 409,
+            erro: erro.message
+        };
+    }
+}
 
 
 // ======================================================
@@ -253,6 +413,7 @@ module.exports = {
     cadastrarGps,
     buscarMotorista,
     salvarPontoGps,
-    buscarPontosDaRota
+    buscarPontosDaRota,
+    salvarPontosGps
 };
 
