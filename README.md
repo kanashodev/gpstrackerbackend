@@ -41,3 +41,4 @@ O banco `database.db` é criado automaticamente.
 - O QR Code contém o próprio número da nota, preparando a futura leitura pelo aplicativo e confirmação via endpoint.
 - O endpoint de confirmação automática ainda não foi criado nesta versão.
 # gpstrackerbackend
+# gpstrackerbackend
