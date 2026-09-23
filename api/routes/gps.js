@@ -1,11 +1,18 @@
+
 const express = require('express');
 
 const {
     salvarPontoGps,
-    salvarPontosGps
+    salvarPontosGps,
+    buscarPontosDaRota
 } = require('../../services/gpsService');
 
 const router = express.Router();
+
+
+// ======================================================
+// RECEBER GPS
+// ======================================================
 
 router.post('/', (req, res) => {
 
@@ -19,6 +26,7 @@ router.post('/', (req, res) => {
         pontos
     } = req.body;
 
+
     // ======================================================
     // VALIDAÇÕES GERAIS
     // ======================================================
@@ -28,18 +36,30 @@ router.post('/', (req, res) => {
         !Number.isInteger(rotaId) ||
         rotaId <= 0
     ) {
+
         return res.status(400).json({
+
             gps: 'erro',
+
             erro: 'Formato inválido'
+
         });
+
     }
 
+
     if (hash.trim() === '') {
+
         return res.status(400).json({
+
             gps: 'erro',
+
             erro: 'Hash inválido'
+
         });
+
     }
+
 
     // ======================================================
     // VÁRIOS PONTOS
@@ -48,11 +68,17 @@ router.post('/', (req, res) => {
     if (Array.isArray(pontos)) {
 
         if (pontos.length === 0) {
+
             return res.status(400).json({
+
                 gps: 'erro',
+
                 erro: 'Lista de pontos vazia'
+
             });
+
         }
+
 
         for (const item of pontos) {
 
@@ -62,47 +88,88 @@ router.post('/', (req, res) => {
                 typeof item.longitude !== 'number' ||
                 typeof item.dataHoraGps !== 'string'
             ) {
+
                 return res.status(400).json({
+
                     gps: 'erro',
+
                     erro: 'Formato inválido em um dos pontos'
+
                 });
+
             }
+
 
             if (item.ponto.trim() === '') {
+
                 return res.status(400).json({
+
                     gps: 'erro',
+
                     erro: 'Ponto inválido'
+
                 });
+
             }
+
         }
 
+
         const resultado = salvarPontosGps({
+
             hash,
             rotaId,
             pontos
+
         });
 
+
         if (!resultado.sucesso) {
-            return res.status(resultado.status).json({
+
+            return res.status(
+                resultado.status
+            ).json({
+
                 gps: 'erro',
+
                 erro: resultado.erro,
+
                 ...(resultado.ponto && {
+
                     ponto: resultado.ponto
+
                 })
+
             });
+
         }
+
 
         res.locals.gpsRecebido = true;
 
+
         return res.status(200).json({
+
             gps: 'ok',
+
             rotaId: resultado.rotaId,
-            quantidadeRecebida: resultado.quantidadeRecebida,
-            quantidadeSalva: resultado.quantidadeSalva,
-            primeiroPonto: resultado.primeiroPonto,
-            ultimoPonto: resultado.ultimoPonto
+
+            quantidadeRecebida:
+                resultado.quantidadeRecebida,
+
+            quantidadeSalva:
+                resultado.quantidadeSalva,
+
+            primeiroPonto:
+                resultado.primeiroPonto,
+
+            ultimoPonto:
+                resultado.ultimoPonto
+
         });
+
     }
+
 
     // ======================================================
     // UM ÚNICO PONTO
@@ -114,50 +181,178 @@ router.post('/', (req, res) => {
         typeof longitude !== 'number' ||
         typeof dataHoraGps !== 'string'
     ) {
+
         return res.status(400).json({
+
             gps: 'erro',
+
             erro: 'Formato inválido'
+
         });
+
     }
+
 
     if (ponto.trim() === '') {
+
         return res.status(400).json({
+
             gps: 'erro',
+
             erro: 'Ponto inválido'
+
         });
+
     }
 
+
     const resultado = salvarPontoGps({
+
         hash,
         rotaId,
         ponto,
         latitude,
         longitude,
         dataHoraGps
+
     });
 
+
     if (!resultado.sucesso) {
-        return res.status(resultado.status).json({
+
+        return res.status(
+            resultado.status
+        ).json({
+
             gps: 'erro',
+
             erro: resultado.erro,
+
             ...(resultado.ponto && {
+
                 ponto: resultado.ponto
+
             })
+
         });
+
     }
+
 
     res.locals.gpsRecebido = true;
 
+
     return res.status(200).json({
+
         gps: 'ok',
+
         id: resultado.id,
+
         rotaId: resultado.rotaId,
+
         ponto: resultado.ponto,
+
         latitude: resultado.latitude,
+
         longitude: resultado.longitude,
+
         dataHoraGps: resultado.dataHoraGps,
-        dataHoraRecebimento: resultado.dataHoraRecebimento
+
+        dataHoraRecebimento:
+            resultado.dataHoraRecebimento
+
     });
+
 });
 
+
+// ======================================================
+// BUSCAR GPS DE UMA ROTA
+// USADO PELO MAPA
+// ======================================================
+
+router.get('/rota/:rotaId', (req, res) => {
+
+    const rotaId =
+        Number(req.params.rotaId);
+
+
+    // ======================================================
+    // VALIDAR ID
+    // ======================================================
+
+    if (
+        !Number.isInteger(rotaId) ||
+        rotaId <= 0
+    ) {
+
+        return res.status(400).json({
+
+            sucesso: false,
+
+            erro: 'ID da rota inválido.'
+
+        });
+
+    }
+
+
+    try {
+
+        const resultado =
+            buscarPontosDaRota(rotaId);
+
+
+        // ==================================================
+        // ROTA NÃO EXISTE
+        // ==================================================
+
+        if (!resultado) {
+
+            return res.status(404).json({
+
+                sucesso: false,
+
+                erro: 'Rota não encontrada.'
+
+            });
+
+        }
+
+
+        // ==================================================
+        // RETORNAR DADOS
+        // ==================================================
+
+        return res.json({
+
+            sucesso: true,
+
+            rota: resultado
+
+        });
+
+
+    } catch (erro) {
+
+        console.error(
+            'Erro ao buscar pontos da rota:',
+            erro
+        );
+
+
+        return res.status(500).json({
+
+            sucesso: false,
+
+            erro: 'Erro interno do servidor.'
+
+        });
+
+    }
+
+});
+
+
 module.exports = router;
+
